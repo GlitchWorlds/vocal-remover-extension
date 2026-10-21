@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Smart Adaptive Vocal Remover",
-  "version": "1.2.0",
-  "description": "Smart, real-time pitch-adaptive vocal removal for Spotify and music tabs. Automatically tracks singer pitch and removes vocals while preserving bass.",
+  "version": "2.0.0",
+  "description": "Smart, real-time vocal removal for Spotify and web audio using 3-Band Linkwitz-Riley crossover, Center suppression, and adaptive pitch tracking.",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabCapture",

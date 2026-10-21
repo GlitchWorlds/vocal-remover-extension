@@ -1,44 +1,49 @@
-# Smart Adaptive Vocal Remover — Chrome Extension (MV3)
+# Smart Adaptive Vocal Remover — Chrome Extension (MV3) v2.0.0
 
-Ekstensi Chrome Manifest V3 untuk menghapus vokal musik di tab browser (Spotify Web, YouTube, dll.) secara real-time dengan **pitch tracking adaptif**. Algoritma secara otomatis menyesuaikan frekuensi filter dengan rentang vokal dan nada penyanyi (bass, bariton, tenor, alto, sopran) tanpa merusak beat dan bass instrumen.
+Ekstensi Chrome Manifest V3 untuk menghapus vokal dari audio tab browser (Spotify Web, YouTube, dll.) secara real-time dengan teknologi **Hybrid 3-Band Linkwitz-Riley (LR4) Crossover, Center Channel Cancellation, dan Haas Stereo Decorrelation**.
 
-## Arsitektur Audio DSP (5 Lapis)
+## Mengapa Versi v1 Bermasalah & Apa Solusinya di v2?
 
-1. **Mid / Side Matrix Split**:
-   - Audio stereo tab didekomposisi menjadi `Mid = (L + R) / 2` (posisi center di mana vokal utama berada) dan `Side = (L - R) / 2` (instrumen panned stereo seperti gitar, synth, dan reverb).
-   - Jalur Side dilewatkan 100% utuh tanpa modifikasi, mempertahankan lebar panggung stereo instrumen.
-2. **Vocal Sidechain Pre-Filter untuk Pitch Tracking**:
-   - Sinyal Mid dialirkan ke rangkaian filter isolasi vokal (Highpass 110 Hz 4th order + Lowpass 1300 Hz) sebelum masuk ke penganalisis.
-   - Sub-bass, dentuman kick drum, dan desis simbal dieliminasi dari jalur analisa, memastikan detektor pitch mengunci nada fundamental penyanyi ($f_0$) murni.
-3. **YIN Pitch Detection & Auto-Tracking**:
-   - Mendeteksi frekuensi fundamental ($f_0$) dalam rentang 75 Hz – 1100 Hz setiap 75 ms.
-   - Smooth tracking membedakan antara vibrato halus dan lompatan melodi nada baru.
-4. **Dynamic Harmonic Comb Filter (14 Harmonik) & Formant Suppression**:
-   - 14 notch filter biquad digerakkan otomatis ke frekuensi harmonik ($f_0, 2f_0, 3f_0, \dots, 14f_0$) dengan kedalaman adaptif.
-   - Redaman vokal Mid band diperdalam (-20 dB s/d -30 dB).
-   - Dilengkapi *Bass Restoration Low-Shelf* (<130 Hz) agar dentuman kick drum dan alur bass gitar tetap bertenaga, serta *High-Shelf* (>7500 Hz) untuk menjaga artikulasi treble.
-5. **Stereo Reconstruction & Transparent Limiter**:
-   - Audio digabungkan kembali: `Out_L = Mid' + Side` dan `Out_R = Mid' - Side`.
-   - Limiter `DynamicsCompressor` di ujung output mencegah terjadinya distorsi atau clipping audio.
+### Permasalahan pada v1:
+1. **Suara Musik Keganggu / Tipis / Pecah**:
+   - Pada v1, channel Mid disaring melalui belasan biquad peaking filter bertingkat (*cascaded*). Setiap filter memutar fasa audio hingga puluhan derajat.
+   - Saat channel Mid digabung kembali dengan channel Side yang tidak disaring, terjadi bentrokan fasa parah (*phase cancellation* destruktif). Akibatnya instrumen stereo (gitar, synth, piano) terdengar hampa, melayang, dan kehilangan artikulasi.
+2. **Suara Vokal Masih Ada**:
+   - Filter notch harmonik sempit hanya memotong frekuensi pas di garis tipis nada $f_0$. Karakter vokal modern memiliki lebar formant, vibrato, dan reverb panned yang tidak tertangkap oleh filter sempit, sehingga vokal masih bocor terdengar.
+
+### Solusi Total di v2.0.0:
+1. **3-Band Linkwitz-Riley (LR4) Phase-Aligned Crossover**:
+   - **Bass Band (< 140 Hz)**: Seluruh dentuman kick drum dan bass guitar dilewatkan **100% utuh dalam stereo asli**. Tidak ada pemotongan frekuensi rendah, sehingga beat musik tetap bertenaga, punchy, dan solid.
+   - **Treble / Air Band (> 7200 Hz)**: Desis simbal, hi-hats, dan sparkle frekuensi tinggi dilewatkan **100% utuh**.
+   - **Vocal Band (140 Hz s/d 7200 Hz)**: Area di mana vokal manusia berada diproses secara terisolasi. Seluruh sinyal melewati filter LR4 24 dB/oktaf yang identik sehingga fasa antara Left dan Right **100% sejajar tanpa distorsi fasa**.
+2. **Symmetric Vocal Band Center Suppression**:
+   - Pada Vocal Band, sinyal dipecah menjadi:
+     $$\text{Center} = \frac{L_{\text{mid}} + R_{\text{mid}}}{2}, \quad \text{Side} = \frac{L_{\text{mid}} - R_{\text{mid}}}{2}$$
+   - Vokal utama yang dipan di tengah ditiadakan secara drastis: $\text{Center}' = \text{Center} \times (1 - \text{strength})$.
+3. **Adaptive Residual Pitch Notch**:
+   - Detektor pitch YIN mendeteksi nada vokal penyanyi ($f_0$) setiap 75 ms.
+   - Filter notch adaptif dipasang pada bus Center untuk menyapu sisa-sisa resonansi vokal fundamental dan harmoniknya tanpa menyentuh instrumen stereo.
+4. **Haas Effect Stereo Decorrelation (Anti-Hollow)**:
+   - Pada pembatalan vokal biasa ($L = S, R = -S$), telinga manusia mengalami sensasi tekanan kepala yang aneh karena fasa 180 derajat terbalik.
+   - Di v2.0, jalur Right Side diberi delay mikro Haas sebesar **0.33 ms** (16 sampel pada 48kHz). Ini memecah phase-lock sehingga instrumen pengiring (gitar, piano, keyboard) terdengar lebar, hangat, alami, dan bebas rasa hampa.
+
+---
 
 ## Cara Install di Chrome
 
-1. Buka browser Google Chrome dan buka alamat `chrome://extensions`.
+1. Buka Google Chrome dan masuk ke `chrome://extensions`.
 2. Aktifkan sakelar **Developer mode** di pojok kanan atas.
 3. Klik tombol **Load unpacked** di pojok kiri atas.
 4. Pilih folder:
-   `D:\OpenClaw\workspace\master-manager-agent\projects\vocal-remover-extension`
-5. Buka tab Spotify Web di [open.spotify.com](https://open.spotify.com) dan putar lagu.
-6. Klik ikon ekstensi di toolbar browser, lalu aktifkan toggle switch ke posisi **ON**.
+   `D:\OpenClaw\master-manager-agent\projects\vocal-remover-extension`
+5. Buka tab [open.spotify.com](https://open.spotify.com) dan putar lagu apa saja.
+6. Klik ikon ekstensi di toolbar Chrome, lalu aktifkan toggle switch ke posisi **ON**.
+
+---
 
 ## Kontrol & Fitur
 
-- **ON / OFF Switch**: Mengaktifkan atau menonaktifkan proses penghapusan vokal.
-- **Removal Strength Slider (0–100%)**: Mengatur seberapa dalam vokal diredam (default 85%).
-- **Detected Vocal Pitch Meter**: Menampilkan not musik, frekuensi real-time (Hz), serta tingkat keyakinan deteksi pitch.
+- **ON / OFF Switch**: Mengaktifkan atau menonaktifkan penghapusan vokal.
+- **Removal Strength Slider (0–100%)**: Default diset ke **95%** untuk peredaman vokal maksimal dengan bass dan beat instrumen yang tetap utuh.
+- **Detected Vocal Pitch Meter**: Menampilkan not musik, frekuensi real-time (Hz), serta tingkat keyakinan deteksi pitch secara live.
 - **Output Level Meter**: Indikator kekuatan level suara yang keluar.
-
-## Catatan Teknis & Batasan Transparan
-
-- Pendekatan DSP real-time Web Audio API memotong vokal center secara drastis, namun backing vocal stereo lebar atau ekor reverb studio yang dipan ke kiri/kanan ekstrem secara fisik masih dapat terdengar samar.
-- Pada Spotify Web, pastikan tab Spotify memutar audio secara aktif. Jika Chrome Anda menerapkan isolasi DRM Widevine ketat pada tabCapture, coba putar lagu di YouTube sebagai pembanding kontrol.

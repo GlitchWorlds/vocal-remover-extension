@@ -78,7 +78,7 @@ async function startCapture() {
   }
 
   const settings = await chrome.storage.local.get(['strength']);
-  const strVal = typeof settings.strength === 'number' ? settings.strength : 0.85;
+  const strVal = typeof settings.strength === 'number' ? settings.strength : 0.95;
 
   await chrome.runtime.sendMessage({
     target: 'offscreen',
@@ -136,7 +136,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const session = await chrome.storage.session.get(['capturing', 'lastPitch']);
       sendResponse({
         enabled: local.enabled === true,
-        strength: typeof local.strength === 'number' ? local.strength : 0.85,
+        strength: typeof local.strength === 'number' ? local.strength : 0.95,
         capturing: session.capturing === true,
         lastPitch: session.lastPitch || null,
       });
@@ -161,7 +161,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   const cur = await chrome.storage.local.get(['enabled', 'strength']);
   const patch = {};
   if (typeof cur.enabled !== 'boolean') patch.enabled = false;
-  if (typeof cur.strength !== 'number') patch.strength = 0.85;
+  if (typeof cur.strength !== 'number') patch.strength = 0.95;
   if (Object.keys(patch).length) await chrome.storage.local.set(patch);
   await setBadge(false);
 });
