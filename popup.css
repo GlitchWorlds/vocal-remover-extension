@@ -1,0 +1,78 @@
+:root {
+  --bg: #0b0f19;
+  --panel: #141a29;
+  --accent: #1db954;
+  --accent-dim: #147a38;
+  --text: #e6e9f0;
+  --muted: #8a93a6;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 280px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  padding: 14px;
+}
+
+header h1 { font-size: 15px; font-weight: 600; }
+header .sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 12px;
+}
+
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: #2a3245; border-radius: 24px; transition: .2s;
+}
+.slider::before {
+  content: ""; position: absolute; height: 18px; width: 18px;
+  left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s;
+}
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(20px); }
+.switch-label { font-weight: 600; letter-spacing: .5px; }
+.switch-label.on { color: var(--accent); }
+
+.meter-section, .strength-section {
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.meter-head {
+  display: flex; justify-content: space-between;
+  font-size: 11.5px; margin-bottom: 5px;
+}
+.meter-head.small { margin-top: 8px; color: var(--muted); }
+.pitch-readout { font-weight: 600; color: var(--accent); }
+
+.meter {
+  height: 6px; background: #232b3d; border-radius: 3px; overflow: hidden;
+}
+.meter-fill {
+  height: 100%; width: 0%; background: var(--accent);
+  border-radius: 3px; transition: width .18s ease;
+}
+.meter-fill.level { background: #4f8ef7; }
+
+input[type="range"] {
+  width: 100%; accent-color: var(--accent); margin-top: 2px;
+}
+
+.hint { font-size: 10px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+footer .status {
+  font-size: 11px;
+}
+footer #statusLine { font-size: 11px; color: var(--muted); line-height: 1.4; }

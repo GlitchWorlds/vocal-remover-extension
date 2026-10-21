@@ -1,0 +1,18 @@
+# Dependencies & environment
+node_modules/
+.env
+*.env.local
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Builds, temporary & archives
+dist/
+build/
+*.zip
+*.tar.gz
+*.log

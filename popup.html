@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>Adaptive Vocal Remover</h1>
+    <p class="sub">Pitch-tracking · Mid/Side · Harmonic comb</p>
+  </header>
+
+  <section class="switch-row">
+    <label class="switch">
+      <input type="checkbox" id="toggle" />
+      <span class="slider"></span>
+    </label>
+    <span class="switch-label" id="toggleLabel">OFF</span>
+  </section>
+
+  <section class="meter-section">
+    <div class="meter-head">
+      <span>Detected vocal pitch</span>
+      <span class="pitch-readout" id="pitchReadout">—</span>
+    </div>
+    <div class="meter">
+      <div class="meter-fill" id="pitchBar"></div>
+    </div>
+    <div class="meter-head small">
+      <span>Output level</span>
+      <span id="levelReadout">—</span>
+    </div>
+    <div class="meter">
+      <div class="meter-fill level" id="levelBar"></div>
+    </div>
+  </section>
+
+  <section class="strength-section">
+    <div class="meter-head">
+      <span>Removal strength</span>
+      <span id="strengthValue">85%</span>
+    </div>
+    <input type="range" id="strength" min="0" max="100" value="85" />
+    <p class="hint">Tinggi = vokal lebih hilang, tapi instrumen center (drum/bass) juga ikut mereda.</p>
+  </section>
+
+  <footer>
+    <span id="statusLine">Klik toggle untuk mulai di tab Spotify aktif.</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
