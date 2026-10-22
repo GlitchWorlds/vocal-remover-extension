@@ -1,10 +1,13 @@
 /**
- * Popup UI — Adaptive Vocal Remover
- * Toggle on/off, strength slider, live pitch & level meter.
+ * Popup UI — Adaptive Vocal Remover (v3.0.0 Dual-Engine)
+ * Toggle on/off, engine mode selector, strength slider, live pitch & level meter.
  */
 
 const toggle = document.getElementById('toggle');
 const toggleLabel = document.getElementById('toggleLabel');
+const engineBadge = document.getElementById('engineBadge');
+const btnSpectral = document.getElementById('btnSpectral');
+const btnDsp = document.getElementById('btnDsp');
 const pitchReadout = document.getElementById('pitchReadout');
 const pitchBar = document.getElementById('pitchBar');
 const levelReadout = document.getElementById('levelReadout');
@@ -16,10 +19,19 @@ const statusLine = document.getElementById('statusLine');
 // PITCH_MIN/MAX harus sinkron dengan audio-engine.js (75–1100 Hz)
 const PITCH_MIN = 75;
 const PITCH_MAX = 1100;
+let currentMode = 'spectral';
 
 function setStatus(text, isError) {
   statusLine.textContent = text;
   statusLine.style.color = isError ? '#f87171' : '';
+}
+
+function updateModeUI(mode) {
+  currentMode = mode || 'spectral';
+  const isSpectral = currentMode === 'spectral';
+  btnSpectral.classList.toggle('active', isSpectral);
+  btnDsp.classList.toggle('active', !isSpectral);
+  engineBadge.textContent = isSpectral ? 'Spectral' : 'Fast DSP';
 }
 
 function applyState(state) {
@@ -28,6 +40,8 @@ function applyState(state) {
   toggleLabel.classList.toggle('on', state.enabled);
   strengthInput.value = Math.round(state.strength * 100);
   strengthValue.textContent = Math.round(state.strength * 100) + '%';
+  updateModeUI(state.mode);
+
   if (!state.enabled) {
     setStatus('Klik toggle untuk mulai di tab Spotify aktif.');
     pitchReadout.textContent = '—';
@@ -55,10 +69,22 @@ toggle.addEventListener('change', async () => {
     setStatus((res && res.error) || 'Gagal mengubah status.', true);
     return;
   }
-  applyState({ enabled, strength: strengthInput.value / 100 });
+  applyState({ enabled, strength: strengthInput.value / 100, mode: currentMode });
   if (enabled) {
     setStatus('Remover aktif. Pastikan lagu diputar di tab Spotify yang sama.');
   }
+});
+
+btnSpectral.addEventListener('click', async () => {
+  if (currentMode === 'spectral') return;
+  updateModeUI('spectral');
+  await chrome.runtime.sendMessage({ target: 'background', type: 'SET_MODE', mode: 'spectral' });
+});
+
+btnDsp.addEventListener('click', async () => {
+  if (currentMode === 'dsp') return;
+  updateModeUI('dsp');
+  await chrome.runtime.sendMessage({ target: 'background', type: 'SET_MODE', mode: 'dsp' });
 });
 
 let strengthTimer = null;

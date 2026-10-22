@@ -7,7 +7,7 @@
 <body>
   <header>
     <h1>Smart Vocal Remover</h1>
-    <p class="sub">Pro Karaoke DSP · 3-Band Crossover · In-Phase Mix</p>
+    <p class="sub">Dual-Engine · Real-Time Spectral STFT & Pro DSP</p>
   </header>
 
   <section class="switch-row">
@@ -16,6 +16,23 @@
       <span class="slider"></span>
     </label>
     <span class="switch-label" id="toggleLabel">OFF</span>
+  </section>
+
+  <section class="engine-section">
+    <div class="meter-head">
+      <span>Engine Mode</span>
+      <span class="badge" id="engineBadge">Spectral</span>
+    </div>
+    <div class="engine-selector">
+      <button type="button" class="engine-btn active" id="btnSpectral" data-mode="spectral">
+        <strong>Spectral Studio</strong>
+        <small>Next-Gen STFT Pan Isolator</small>
+      </button>
+      <button type="button" class="engine-btn" id="btnDsp" data-mode="dsp">
+        <strong>Fast Crossover</strong>
+        <small>3-Band LR4 + In-Phase</small>
+      </button>
+    </div>
   </section>
 
   <section class="meter-section">

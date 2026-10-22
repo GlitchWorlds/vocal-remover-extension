@@ -22,7 +22,7 @@ async function ensureOffscreen() {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_PATH,
     reasons: ['USER_MEDIA'],
-    justification: 'Process captured tab audio to remove vocals in real time via pitch-adaptive DSP',
+    justification: 'Process captured tab audio to remove vocals in real time via dual-engine DSP/STFT',
   });
 }
 
@@ -77,8 +77,9 @@ async function startCapture() {
     return { ok: false, error: 'Gagal mengambil alih audio tab: ' + err.message };
   }
 
-  const settings = await chrome.storage.local.get(['strength']);
-  const strVal = typeof settings.strength === 'number' ? settings.strength : 0.95;
+  const settings = await chrome.storage.local.get(['strength', 'mode']);
+  const strVal = typeof settings.strength === 'number' ? settings.strength : 1.0;
+  const modeVal = settings.mode || 'spectral';
 
   await chrome.runtime.sendMessage({
     target: 'offscreen',
@@ -86,6 +87,7 @@ async function startCapture() {
     streamId,
     tabId: tab.id,
     strength: strVal,
+    mode: modeVal,
   });
 
   await chrome.storage.session.set({ capturing: true, capturedTabId: tab.id });
@@ -130,13 +132,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'SET_MODE') {
+    (async () => {
+      await chrome.storage.local.set({ mode: msg.mode });
+      await chrome.runtime.sendMessage({
+        target: 'offscreen',
+        type: 'SET_MODE',
+        mode: msg.mode,
+      }).catch(() => {});
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+
   if (msg.type === 'GET_STATE') {
     (async () => {
-      const local = await chrome.storage.local.get(['enabled', 'strength']);
+      const local = await chrome.storage.local.get(['enabled', 'strength', 'mode']);
       const session = await chrome.storage.session.get(['capturing', 'lastPitch']);
       sendResponse({
         enabled: local.enabled === true,
-        strength: typeof local.strength === 'number' ? local.strength : 0.95,
+        strength: typeof local.strength === 'number' ? local.strength : 1.0,
+        mode: local.mode || 'spectral',
         capturing: session.capturing === true,
         lastPitch: session.lastPitch || null,
       });
@@ -147,21 +163,4 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'PITCH_UPDATE') {
     chrome.storage.session.set({ lastPitch: msg.pitch });
   }
-});
-
-// Berhenti otomatis jika tab yang di-capture ditutup
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const session = await chrome.storage.session.get(['capturedTabId']);
-  if (session.capturedTabId === tabId) {
-    await stopCapture();
-  }
-});
-
-chrome.runtime.onInstalled.addListener(async () => {
-  const cur = await chrome.storage.local.get(['enabled', 'strength']);
-  const patch = {};
-  if (typeof cur.enabled !== 'boolean') patch.enabled = false;
-  if (typeof cur.strength !== 'number') patch.strength = 0.95;
-  if (Object.keys(patch).length) await chrome.storage.local.set(patch);
-  await setBadge(false);
 });

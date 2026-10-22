@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Smart Adaptive Vocal Remover",
-  "version": "2.1.0",
-  "description": "Smart real-time vocal remover with True Dry/Wet crossfade, 3-Band phase-matched crossover, and in-phase center cancellation.",
+  "version": "3.0.0",
+  "description": "Dual-engine real-time vocal remover for Spotify and web audio featuring Next-Gen Spectral STFT Pan Isolation and Fast 3-Band LR4 DSP.",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabCapture",
