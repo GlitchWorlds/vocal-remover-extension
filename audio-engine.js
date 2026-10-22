@@ -1,46 +1,31 @@
 /**
- * Smart Adaptive Vocal Remover — Audio Engine (v2.0.0 Architecture)
+ * Smart Adaptive Vocal Remover — Audio Engine (v2.1.0 Architecture)
  *
- * Mengapa v1 bermasalah:
- * 1. Mid dan Side diproses secara asimetris melalui belasan filter biquad peaking seri.
- *    Setiap filter memutar fasa (phase shift) hingga -90 derajat. Akibatnya, saat Mid'
- *    dan Side digabungkan kembali, fasa keduanya bentrok total (phase cancellation parah),
- *    membuat instrumen musik terdengar hampa, tipis, terdistorsi, atau terganggu ("suara musik keganggu").
- * 2. Vokal di era modern seringkali memiliki lebar reverb stereo, sedikit panning, atau harmonik
- *    yang tidak murni center, sehingga filter notch sempit berbasis comb filter meleset
- *    dan vokal masih bocor terdengar ("suara vocal masih ada").
+ * Root Cause & Engineering Solutions:
+ * 1. ZERO-DIFFERENCE AT STRENGTH = 0 (TRUE DRY/WET CROSSFADE):
+ *    - Masalah sebelumnya: saat fitur ON tapi strength 0, audio tetap melewati filter crossover,
+ *      limiter, delay, dan makeup gain, sehingga suara tetap berubah dibandingkan posisi OFF.
+ *    - Solusi v2.1.0: Menerapkan True Dry/Wet Gain Matrix.
+ *      * Jalur Dry: Input murni tanpa filter, tanpa delay, tanpa limiter, dikalikan (1 - strength).
+ *      * Jalur Wet: Pemrosesan penghilang vokal, dikalikan (strength).
+ *      * Saat strength = 0: Jalur Dry = 1.0 (100%), Jalur Wet = 0.0 (0%).
+ *        Suara yang keluar 100% bit-for-bit identik dengan kondisi OFF tanpa perbedaan sekecil apa pun!
+ *      * Saat strength digeser 0% -> 100%: Volume vokal berkurang secara presisi dan proporsional.
  *
- * Solusi Teruji & Terbukti (Arsitektur Hybrid 3-Band Linkwitz-Riley Crossover + Haas Decorrelation):
+ * 2. MENCEGAH LAGU/MUSIK IKUT HILANG (IN-PHASE DIFF + 3-BAND CROSSOVER):
+ *    - Masalah sebelumnya: sinyal Side diberi polaritas berlawanan (+Side pada L, -Side pada R).
+ *      Saat diputar di speaker laptop/kamar, gelombang +Side dan -Side bertabrakan di udara
+ *      sehingga saling menghilangkan (acoustic cancellation). Akibatnya lagunya terasa lenyap!
+ *    - Solusi v2.1.0:
+ *      * Bass Band (< 130 Hz): Kick drum dan bass guitar 100% UTUH stereo asli.
+ *      * Treble Band (> 7000 Hz): Simbal, hi-hat, dan sparkle 100% UTUH stereo asli.
+ *      * Vocal Band (130 Hz - 7000 Hz): Center vokal ditiadakan murni via selisih in-phase (L - R) / 2
+ *        ke kedua channel stereo, sehingga fasa di udara saling menguatkan (bukan saling mematikan).
+ *        Lagu, melodi instrumen, dan ritme musik tetap terdengar keras, tebal, dan jelas!
  *
- * 1. 3-BAND LINKWITZ-RILEY (LR4) CROSSOVER (FASA SEJAJAR):
- *    - Bass Band (< 140 Hz):
- *      Kick drum dan alur bass gitar dilewatkan 100% UTUH dalam stereo asli.
- *      Tidak ada pemotongan bass, dentuman tetap bertenaga dan solid.
- *    - Treble / Air Band (> 7200 Hz):
- *      Desis simbal, hi-hats, dan sparkle frekuensi tinggi dilewatkan 100% UTUH.
- *    - Vocal Band (140 Hz s/d 7200 Hz):
- *      Area frekuensi di mana vokal manusia berada, dipisahkan secara presisi.
- *      Semua channel (L dan R) melewati filter LR4 yang identik, sehingga respon fasa
- *      antara L dan R tetap 100% sejajar dan tidak ada distorsi fasa.
- *
- * 2. SYMMETRIC VOCAL BAND CANCELLATION (CENTER SUPPRESSION):
- *    - Pada Vocal Band:
- *      Center = 0.5 * (L_mid + R_mid)
- *      Side   = 0.5 * (L_mid - R_mid)
- *    - Sinyal vokal utama (yang dipan tepat di tengah) berada murni pada Center.
- *      Center ditekan secara drastis berdasarkan strength: Center' = Center * (1 - strength).
- *
- * 3. REAL-TIME YIN PITCH TRACKING & ADAPTIVE RESIDUAL NOTCH:
- *    - Algoritma YIN mendeteksi nada vokal penyanyi ($f_0$) setiap 75 ms.
- *    - Pada residual Center', filter notch adaptif melacak frekuensi fundamental $f_0$
- *      dan harmonik $2f_0$ penyanyi untuk menyapu sisa resonansi vokal yang membandel.
- *
- * 4. HAAS EFFECT STEREO DECORRELATION (ANTI-HOLLOW):
- *    - Pada pembatalan vokal konvensional (L = S, R = -S), telinga manusia mengalami
- *      sensasi tekanan kepala yang tidak nyaman akibat fasa 180 derajat terbalik.
- *    - Jalur Right Side diberikan micro-delay Haas (0.33 ms / 16 sampel pada 48kHz).
- *      Ini memecah phase-lock sehingga instrumen pengiring (gitar, keyboard, string)
- *      terdengar lebar, megah, alami, dan bebas rasa hampa.
+ * 3. REAL-TIME YIN PITCH RESIDUAL NOTCH:
+ *    - Melacak nada fundamental (f0) penyanyi secara adaptif setiap 75 ms untuk menyapu
+ *      sisa-sisa vibrato dan resonansi vokal pada jalur Wet.
  */
 
 'use strict';
@@ -48,7 +33,7 @@
 let audioCtx = null;
 let mediaStream = null;
 let nodes = null;
-let strength = 0.95; // Default 95% untuk peredaman vokal maksimal & bersih
+let strength = 1.0; // Default 100% removal
 let capturing = false;
 let pollTimer = null;
 
@@ -59,8 +44,8 @@ const PITCH_MAX = 1100;     // Hz
 const YIN_THRESHOLD = 0.15;
 const UPDATE_INTERVAL_MS = 75;
 
-const F_BASS_CROSSOVER = 140;   // Hz
-const F_TREBLE_CROSSOVER = 7200; // Hz
+const F_BASS_CROSSOVER = 130;    // Hz
+const F_TREBLE_CROSSOVER = 7000;  // Hz
 
 let currentF0 = 0;
 let currentConf = 0;
@@ -149,16 +134,31 @@ function createLR4(ctx, type, freq) {
   return { input: f1, output: f2 };
 }
 
-// ── Membangun Graph Audio DSP ──
+// ── Membangun Graph Audio DSP (True Dry/Wet Architecture) ──
 function buildGraph(stream) {
   const ctx = audioCtx;
   const source = ctx.createMediaStreamSource(stream);
 
-  // Split stereo input menjadi L dan R terpisah
+  // Split input stereo L dan R
   const inSplitter = ctx.createChannelSplitter(2);
   source.connect(inSplitter);
 
-  // 1. Crossover Band 1: Bass (< 140 Hz)
+  // ==========================================
+  // JALUR 1: PURE DRY PATH (Direct Pass-Through)
+  // Tidak ada filter, tidak ada delay, tidak ada kompresi!
+  // ==========================================
+  const dryGainL = ctx.createGain();
+  const dryGainR = ctx.createGain();
+  dryGainL.gain.value = Math.max(0, 1.0 - strength);
+  dryGainR.gain.value = Math.max(0, 1.0 - strength);
+
+  inSplitter.connect(dryGainL, 0);
+  inSplitter.connect(dryGainR, 1);
+
+  // ==========================================
+  // JALUR 2: WET PATH (Vocal Removal Processing)
+  // ==========================================
+  // 1. Crossover Band 1: Bass (< 130 Hz)
   const bassLP_L = createLR4(ctx, 'lowpass', F_BASS_CROSSOVER);
   const bassLP_R = createLR4(ctx, 'lowpass', F_BASS_CROSSOVER);
   const bassHP_L = createLR4(ctx, 'highpass', F_BASS_CROSSOVER);
@@ -169,7 +169,7 @@ function buildGraph(stream) {
   inSplitter.connect(bassHP_L.input, 0);
   inSplitter.connect(bassHP_R.input, 1);
 
-  // 2. Crossover Band 2 & 3: Dari sisa (> 140 Hz), split ke Mid (Vocal) dan Treble (> 7200 Hz)
+  // 2. Crossover Band 2 & 3: Dari sisa (>130 Hz), split ke Mid (Vocal) dan Treble (>7000 Hz)
   const trebleHP_L = createLR4(ctx, 'highpass', F_TREBLE_CROSSOVER);
   const trebleHP_R = createLR4(ctx, 'highpass', F_TREBLE_CROSSOVER);
   const midLP_L = createLR4(ctx, 'lowpass', F_TREBLE_CROSSOVER);
@@ -180,35 +180,19 @@ function buildGraph(stream) {
   bassHP_L.output.connect(midLP_L.input);
   bassHP_R.output.connect(midLP_R.input);
 
-  // 3. Vocal Band (Mid Band): Pemisahan Center dan Side
-  // L_mid = midLP_L.output, R_mid = midLP_R.output
-  // Center = 0.5 * (L_mid + R_mid)
-  // Side   = 0.5 * (L_mid - R_mid)
-  const midCenter = ctx.createGain(); // Bus Center
-  const midSide = ctx.createGain();   // Bus Side
+  // 3. Vocal Band (Mid Band): Selisih In-Phase (L - R) / 2
+  // Vokal center identik di L dan R, sehingga L - R = 0 (100% vokal tereliminasi)
+  // Instrumen panned (gitar, keyboard) tetap ada.
+  const diffBus = ctx.createGain();
+  const halfL = ctx.createGain(); halfL.gain.value = 0.5;
+  const negHalfR = ctx.createGain(); negHalfR.gain.value = -0.5;
 
-  const halfL_C = ctx.createGain(); halfL_C.gain.value = 0.5;
-  const halfR_C = ctx.createGain(); halfR_C.gain.value = 0.5;
-  midLP_L.output.connect(halfL_C);
-  midLP_R.output.connect(halfR_C);
-  halfL_C.connect(midCenter);
-  halfR_C.connect(midCenter);
+  midLP_L.output.connect(halfL);
+  midLP_R.output.connect(negHalfR);
+  halfL.connect(diffBus);
+  negHalfR.connect(diffBus);
 
-  const halfL_S = ctx.createGain(); halfL_S.gain.value = 0.5;
-  const negHalfR_S = ctx.createGain(); negHalfR_S.gain.value = -0.5;
-  midLP_L.output.connect(halfL_S);
-  midLP_R.output.connect(negHalfR_S);
-  halfL_S.connect(midSide);
-  negHalfR_S.connect(midSide);
-
-  // Center Gain Control (Vocal Suppression):
-  // Saat strength = 1.0, center vocal = 0.
-  const centerGain = ctx.createGain();
-  centerGain.gain.value = Math.max(0, 1 - strength);
-  midCenter.connect(centerGain);
-
-  // Adaptive Residual Pitch Notch Filters pada Center Bus
-  // Melacak nada fundamental (f0) dan 2f0 penyanyi
+  // Adaptive Residual Pitch Notching pada bus Diff
   const notchF0 = ctx.createBiquadFilter();
   notchF0.type = 'peaking';
   notchF0.frequency.value = 220;
@@ -221,56 +205,53 @@ function buildGraph(stream) {
   notch2F0.Q.value = 4.0;
   notch2F0.gain.value = 0;
 
-  centerGain.connect(notchF0);
+  diffBus.connect(notchF0);
   notchF0.connect(notch2F0);
-  const cleanCenter = notch2F0;
+  const cleanDiff = notch2F0;
 
-  // Haas Effect Decorrelation pada Side Channel
-  // Memberikan delay mikro 0.33 ms (0.00033 detik) pada inverted side bus
-  // untuk menghilangkan efek hampa/tekanan telinga akibat inversi fasa 180 derajat
-  const haasDelay = ctx.createDelay(0.01);
-  haasDelay.delayTime.value = 0.00033; // ~16 sampel pada 48kHz
+  // Wet Output Recombination
+  // Wet_L = Bass_L + CleanDiff + Treble_L
+  // Wet_R = Bass_R + CleanDiff + Treble_R
+  // In-phase diff ke kedua telinga: Mencegah acoustic phase cancellation di speaker!
+  const wetL = ctx.createGain();
+  const wetR = ctx.createGain();
+  wetL.gain.value = strength;
+  wetR.gain.value = strength;
 
-  const sidePos = ctx.createGain(); sidePos.gain.value = 1.0;
-  const sideNeg = ctx.createGain(); sideNeg.gain.value = -1.0;
-  midSide.connect(sidePos);
-  midSide.connect(haasDelay);
-  haasDelay.connect(sideNeg);
+  bassLP_L.output.connect(wetL);
+  cleanDiff.connect(wetL);
+  trebleHP_L.output.connect(wetL);
 
-  // 4. Output Mixer:
-  // Out_L = Bass_L + Treble_L + CleanCenter + SidePos
-  // Out_R = Bass_R + Treble_R + CleanCenter + SideNeg
+  bassLP_R.output.connect(wetR);
+  cleanDiff.connect(wetR);
+  trebleHP_R.output.connect(wetR);
+
+  // ==========================================
+  // JALUR 3: FINAL MASTER OUTPUT MERGER
+  // Out_L = Dry_L + Wet_L
+  // Out_R = Dry_R + Wet_R
+  // ==========================================
   const outMerger = ctx.createChannelMerger(2);
+  dryGainL.connect(outMerger, 0, 0);
+  wetL.connect(outMerger, 0, 0);
 
-  // Jalur Kiri
-  bassLP_L.output.connect(outMerger, 0, 0);   // Bass Kiri UTUH
-  trebleHP_L.output.connect(outMerger, 0, 0); // Treble Kiri UTUH
-  cleanCenter.connect(outMerger, 0, 0);       // Center yang sudah bersih dari vokal
-  sidePos.connect(outMerger, 0, 0);           // Instrumen Side Kiri
+  dryGainR.connect(outMerger, 0, 1);
+  wetR.connect(outMerger, 0, 1);
 
-  // Jalur Kanan
-  bassLP_R.output.connect(outMerger, 0, 1);   // Bass Kanan UTUH
-  trebleHP_R.output.connect(outMerger, 0, 1); // Treble Kanan UTUH
-  cleanCenter.connect(outMerger, 0, 1);       // Center yang sudah bersih dari vokal
-  sideNeg.connect(outMerger, 0, 1);           // Instrumen Side Kanan (Haas Decorrelated)
+  outMerger.connect(ctx.destination);
 
-  // Limiter transparan & Makeup Gain
-  const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -3.0;
-  limiter.knee.value = 4.0;
-  limiter.ratio.value = 12.0;
-  limiter.attack.value = 0.003;
-  limiter.release.value = 0.20;
+  // ==========================================
+  // JALUR ANALISIS PITCH & METER
+  // ==========================================
+  // Diambil dari center sinyal mid untuk deteksi nada vokal penyanyi
+  const midCenter = ctx.createGain();
+  const halfC_L = ctx.createGain(); halfC_L.gain.value = 0.5;
+  const halfC_R = ctx.createGain(); halfC_R.gain.value = 0.5;
+  midLP_L.output.connect(halfC_L);
+  midLP_R.output.connect(halfC_R);
+  halfC_L.connect(midCenter);
+  halfC_R.connect(midCenter);
 
-  const makeup = ctx.createGain();
-  makeup.gain.value = 1.15; // Kompensasi level yang nyaman & seimbang
-
-  outMerger.connect(limiter);
-  limiter.connect(makeup);
-  makeup.connect(ctx.destination);
-
-  // 5. Sidechain Pre-Filter untuk YIN Pitch Tracking
-  // Diambil dari sinyal Center sebelum diredam, disaring dengan bandpass vokal murni
   const scHP = ctx.createBiquadFilter();
   scHP.type = 'highpass';
   scHP.frequency.value = 110;
@@ -291,12 +272,14 @@ function buildGraph(stream) {
 
   const outAnalyser = ctx.createAnalyser();
   outAnalyser.fftSize = 2048;
-  makeup.connect(outAnalyser);
+  outMerger.connect(outAnalyser);
 
   return {
     source, inSplitter,
-    centerGain, notchF0, notch2F0,
-    pitchAnalyser, outAnalyser, makeup,
+    dryGainL, dryGainR,
+    wetL, wetR,
+    notchF0, notch2F0,
+    pitchAnalyser, outAnalyser,
   };
 }
 
@@ -306,23 +289,27 @@ function applyAdaptiveParams(f0, conf, now) {
   const s = strength;
   const tau = 0.04;
 
-  // Update peredaman Center
-  // Saat s = 1.0 (100%), Center vokal diredam maksimal
-  const targetCenterGain = Math.max(0, 1 - s);
-  nodes.centerGain.gain.setTargetAtTime(targetCenterGain, now, tau);
+  // 1. Update True Dry/Wet Gains
+  // At s = 0: dry = 1.0, wet = 0.0 (BIT-EXACT DIRECT PASS-THROUGH)
+  // At s = 1: dry = 0.0, wet = 1.0 (100% VOCAL REMOVAL)
+  const targetDry = Math.max(0, 1.0 - s);
+  const targetWet = s;
 
-  // Adaptive Residual Pitch Notching
+  nodes.dryGainL.gain.setTargetAtTime(targetDry, now, tau);
+  nodes.dryGainR.gain.setTargetAtTime(targetDry, now, tau);
+  nodes.wetL.gain.setTargetAtTime(targetWet, now, tau);
+  nodes.wetR.gain.setTargetAtTime(targetWet, now, tau);
+
+  // 2. Adaptive Residual Pitch Notching
   const effectiveF0 = f0 > 0 ? f0 : smoothedF0;
   const nyquist = audioCtx.sampleRate / 2;
 
-  if (effectiveF0 >= PITCH_MIN && effectiveF0 <= PITCH_MAX && conf >= 0.25) {
+  if (s > 0.05 && effectiveF0 >= PITCH_MIN && effectiveF0 <= PITCH_MAX && conf >= 0.25) {
     const notchDepth = -(12 + 10 * s) * Math.max(0.4, conf);
 
-    // Fundamental f0
     nodes.notchF0.frequency.setTargetAtTime(effectiveF0, now, tau);
     nodes.notchF0.gain.setTargetAtTime(notchDepth, now, tau);
 
-    // 2nd Harmonic 2f0
     if (effectiveF0 * 2 < nyquist * 0.94) {
       nodes.notch2F0.frequency.setTargetAtTime(effectiveF0 * 2, now, tau);
       nodes.notch2F0.gain.setTargetAtTime(notchDepth * 0.85, now, tau);
@@ -330,7 +317,6 @@ function applyAdaptiveParams(f0, conf, now) {
       nodes.notch2F0.gain.setTargetAtTime(0, now, tau);
     }
   } else {
-    // Saat suara jeda atau pitch tidak yakin, buka notch secara bertahap
     nodes.notchF0.gain.setTargetAtTime(0, now, tau * 2);
     nodes.notch2F0.gain.setTargetAtTime(0, now, tau * 2);
   }
@@ -434,10 +420,7 @@ async function stopCapture() {
     for (const t of mediaStream.getTracks()) t.stop();
     mediaStream = null;
   }
-  if (nodes) {
-    try { nodes.makeup.disconnect(); } catch {}
-    nodes = null;
-  }
+  nodes = null;
   if (audioCtx) {
     try { await audioCtx.close(); } catch {}
     audioCtx = null;

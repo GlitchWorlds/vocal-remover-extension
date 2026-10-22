@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Smart Adaptive Vocal Remover",
-  "version": "2.0.0",
-  "description": "Smart, real-time vocal removal for Spotify and web audio using 3-Band Linkwitz-Riley crossover, Center suppression, and adaptive pitch tracking.",
+  "version": "2.1.0",
+  "description": "Smart real-time vocal remover with True Dry/Wet crossfade, 3-Band phase-matched crossover, and in-phase center cancellation.",
   "minimum_chrome_version": "116",
   "permissions": [
     "tabCapture",
